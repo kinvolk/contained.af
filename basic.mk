@@ -161,6 +161,12 @@ image: ## Create the docker image from the Dockerfile.
 image-dev:
 	@docker build --rm --force-rm -f Dockerfile.dev -t $(REGISTRY)/$(NAME):dev .
 
+.PHONY: push-images
+push-images:
+	@docker push $(REGISTRY)/$(NAME):latest
+	@docker push $(REGISTRY)/$(NAME):dev
+	@docker push $(REGISTRY)/docker:userns
+
 .PHONY: AUTHORS
 AUTHORS:
 	@$(file >$@,# This file lists all individuals having contributed content to the repository.)
