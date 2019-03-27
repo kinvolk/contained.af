@@ -1,4 +1,4 @@
-HOME            = /etc/docker/ssl
+HOME            = $ENV::PWD/.certs
 RANDFILE        = $ENV::HOME/.rnd
 
 ####################################################################

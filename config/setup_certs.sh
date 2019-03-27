@@ -1,7 +1,7 @@
 #!/bin/sh
 
-CONFIGS_DIR=/etc/docker/daemon/config
-CERT_DIR=/etc/docker/ssl
+CONFIGS_DIR=$PWD/config
+CERT_DIR=$PWD/.certs
 
 CERT_SUBJ="/C=US/ST=New York/L=New York City/O=Contained.AF/CN=Contained.AF CA"
 
@@ -70,4 +70,3 @@ if [ "$1" = 'dockerd' ]; then
 	set -- sh "$(which dind)" "$@"
 fi
 
-exec dind "$@"

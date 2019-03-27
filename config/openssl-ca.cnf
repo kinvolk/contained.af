@@ -1,4 +1,4 @@
-HOME            = /etc/docker/ssl
+HOME            = $ENV::PWD/.certs
 RANDFILE        = $ENV::HOME/.rnd
 
 ####################################################################
@@ -17,7 +17,7 @@ x509_extensions = ca_extensions     # The extensions to add to the cert
 email_in_dn = no            # Don't concat the email in the DN
 copy_extensions = copy          # Required to copy SANs from CSR to cert
 
-base_dir    = /etc/docker/ssl
+base_dir    = $ENV::PWD/.certs
 certificate = $base_dir/cacert.pem  # The CA certifcate
 private_key = $base_dir/cakey.pem   # The CA private key
 new_certs_dir   = $base_dir     # Location for new certs after signing
