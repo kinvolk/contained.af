@@ -6,7 +6,7 @@ NAME="${NAME:-contained.af}"
 PKG="${PKG:-github.com/genuinetools/${NAME}}"
 REGISTRY="${REGISTRY:-quay.io/dongsupark}"
 
-DOCKER_FLAGS="--rm -i -t --net=host --disable-content-trust=true --volume=/var/run/docker.sock:/var/run/docker.sock --volume=$PWD/.certs:/etc/docker/ssl:ro"
+DOCKER_FLAGS="--rm -t --net=host --disable-content-trust=true --volume=/var/run/docker.sock:/var/run/docker.sock --volume=$PWD/.certs:/etc/docker/ssl:ro"
 
 docker run ${DOCKER_FLAGS} \
 	"${REGISTRY}/${NAME}:latest" -d \

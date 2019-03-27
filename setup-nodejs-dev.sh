@@ -6,7 +6,7 @@ NAME="${NAME:-contained.af}"
 PKG="${PKG:-github.com/genuinetools/${NAME}}"
 REGISTRY="${REGISTRY:-quay.io/dongsupark}"
 
-DOCKER_FLAGS="--rm -i --disable-content-trust=true -v ${PWD}:/go/src/${PKG} --workdir /go/src/${PKG}"
+DOCKER_FLAGS="--rm --disable-content-trust=true -v ${PWD}:/go/src/${PKG} --workdir /go/src/${PKG}"
 
 docker run ${DOCKER_FLAGS} \
 	"${REGISTRY}/${NAME}:dev" \
