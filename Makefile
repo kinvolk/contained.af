@@ -41,16 +41,19 @@ stop-dind: ## Stops the docker-in-docker container.
 	@docker rm -f $(NAME)-dind >/dev/null 2>&1 || true
 
 .PHONY: run
-run: dind image ## Run the server locally in a docker container.
+#run: dind image ## Run the server locally in a docker container.
+run: image ## Run the server locally in a docker container.
 	docker run --rm -i $(DOCKER_FLAGS) \
-		-v $(CURDIR)/.certs:/etc/docker/ssl:ro \
-		--net container:$(NAME)-dind \
+		--volume=/var/run/docker.sock:/var/run/docker.sock \
+		--volume=$(CURDIR)/.certs:/etc/docker/ssl:ro \
+		--net=host \
 		--disable-content-trust=true \
 		$(REGISTRY)/$(NAME) -d \
 		--dcacert=/etc/docker/ssl/cacert.pem \
 		--dcert=/etc/docker/ssl/client.cert \
 		--dkey=/etc/docker/ssl/client.key \
-		--port=$(LISTEN_PORT)
+		--port=$(LISTEN_PORT) \
+		--dhost=tcp://127.0.0.1:2375
 
 DOCKER_FLAGS+=--rm -i \
 	--disable-content-trust=true
