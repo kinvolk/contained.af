@@ -94,7 +94,7 @@ func main() {
 
 		c := &http.Client{
 			Transport: &http.Transport{
-				TLSClientConfig: &tlsConfig,
+				// TLSClientConfig: &tlsConfig,
 			},
 		}
 
