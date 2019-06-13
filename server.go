@@ -66,6 +66,7 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// start the container and create the container websocket connection
+	fmt.Printf("profilesHandler: request.URL.Query()=%+v\n", r.URL.Query())
 	cid, containerWSConn, err := h.startContainer(
 		constructContainerInfo(r),
 	)

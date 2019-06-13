@@ -25,15 +25,15 @@ type containerInfo struct {
 	port        string
 }
 
-func generatePort(portStr string) (nat.PortSet, error) {
+func generatePort(portStr string) (*nat.Port, nat.PortSet, error) {
 	if portStr == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 	port, err := nat.NewPort("tcp", portStr)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return nat.PortSet{
+	return &port, nat.PortSet{
 		port: struct{}{},
 	}, nil
 }
@@ -57,10 +57,11 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 
 	dropCaps := &strslice.StrSlice{"NET_RAW"}
 
-	port, err := generatePort(ctrInfo.port)
+	port, portSet, err := generatePort(ctrInfo.port)
 	if err != nil {
 		return "", nil, err
 	}
+	fmt.Printf("startContainer: port=%q port=%+v portSet=%+v\n", ctrInfo.port, *port, portSet)
 
 	// Add defaults to the docker image
 	image := ctrInfo.dockerImage
@@ -80,7 +81,7 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 			AttachStderr: true,
 			OpenStdin:    true,
 			StdinOnce:    true,
-			ExposedPorts: port,
+			ExposedPorts: portSet,
 		},
 		&container.HostConfig{
 			SecurityOpt: securityOpts,
@@ -92,6 +93,15 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 			Resources: container.Resources{
 				PidsLimit: 5,
 			},
+			PortBindings: nat.PortMap{
+				*port: []nat.PortBinding{
+					{
+						//HostIP:   "0.0.0.0",
+						HostPort: ctrInfo.port,
+					},
+				},
+			},
+			PublishAllPorts: true,
 		},
 		nil, "")
 	if err != nil {
