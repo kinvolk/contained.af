@@ -15,13 +15,37 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/term"
+	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 )
 
+type containerInfo struct {
+	dockerImage string
+	port        string
+}
+
+func generatePort(portStr string) (nat.PortSet, error) {
+	if portStr == "" {
+		return nil, nil
+	}
+	port, err := nat.NewPort("tcp", portStr)
+	if err != nil {
+		return nil, err
+	}
+	return nat.PortSet{
+		port: struct{}{},
+	}, nil
+}
+
 // startContainer starts a docker container and returns the container ID
 // as well as a websocket connection to the attach endpoint.
-func (h *handler) startContainer() (string, *websocket.Conn, error) {
+func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn, error) {
+	// pull alpine image if we don't already have it
+	if err := h.pullImage(ctrInfo.dockerImage); err != nil {
+		logrus.Fatalf("pulling %s failed: %v", ctrInfo.dockerImage, err)
+	}
+
 	securityOpts := []string{
 		"no-new-privileges",
 	}
@@ -33,11 +57,16 @@ func (h *handler) startContainer() (string, *websocket.Conn, error) {
 
 	dropCaps := &strslice.StrSlice{"NET_RAW"}
 
+	port, err := generatePort(ctrInfo.port)
+	if err != nil {
+		return "", nil, err
+	}
+
 	// create the container
 	r, err := h.dcli.ContainerCreate(
 		context.Background(),
 		&container.Config{
-			Image:        defaultDockerImage,
+			Image:        ctrInfo.dockerImage,
 			Cmd:          []string{"sh"},
 			Tty:          true,
 			AttachStdin:  true,
@@ -45,6 +74,7 @@ func (h *handler) startContainer() (string, *websocket.Conn, error) {
 			AttachStderr: true,
 			OpenStdin:    true,
 			StdinOnce:    true,
+			ExposedPorts: port,
 		},
 		&container.HostConfig{
 			SecurityOpt: securityOpts,
