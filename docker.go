@@ -62,11 +62,17 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 		return "", nil, err
 	}
 
+	// Add defaults to the docker image
+	image := ctrInfo.dockerImage
+	if image == "" {
+		image = defaultDockerImage
+	}
+
 	// create the container
 	r, err := h.dcli.ContainerCreate(
 		context.Background(),
 		&container.Config{
-			Image:        ctrInfo.dockerImage,
+			Image:        image,
 			Cmd:          []string{"sh"},
 			Tty:          true,
 			AttachStdin:  true,
