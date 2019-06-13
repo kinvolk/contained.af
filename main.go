@@ -118,16 +118,13 @@ func main() {
 			tlsConfig: &tlsConfig,
 		}
 
-		// websocket handler
-		http.HandleFunc("/term", h.websocketHandler)
-
 		// ping handler
 		http.HandleFunc("/ping", pingHandler)
 
 		// info handler
 		http.HandleFunc("/info", h.infoHandler)
 
-		// select profiles
+		// select profiles and websocket handling
 		http.HandleFunc("/profiles", h.profilesHandler)
 
 		// static files
