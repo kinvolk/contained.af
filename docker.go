@@ -15,13 +15,47 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/term"
+	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 )
 
+type containerInfo struct {
+	dockerImage string
+	port        string
+}
+
+func generatePort(portStr string) (nat.Port, error) {
+	if portStr == "" {
+		return "", nil
+	}
+	port, err := nat.NewPort("tcp", portStr)
+	if err != nil {
+		return "", err
+	}
+	portInt := port.Int()
+	if portInt < 36100 || portInt > 36110 {
+		// this is the allowed range of open ports defined in terraform config
+		// https://github.com/kinvolk/container-escape-bounty/pull/19
+		return "", fmt.Errorf("port not in range [36100, 36110], given: %d", portInt)
+	}
+	return port, nil
+}
+
 // startContainer starts a docker container and returns the container ID
 // as well as a websocket connection to the attach endpoint.
-func (h *handler) startContainer() (string, *websocket.Conn, error) {
+func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn, error) {
+	image := ctrInfo.dockerImage
+	// Use default docker image when user does not provide any
+	if image == "" {
+		image = defaultDockerImage
+	}
+
+	// pull container image if we don't already have it
+	if err := h.pullImage(image); err != nil {
+		return "", nil, fmt.Errorf("pulling %s failed: %v", image, err)
+	}
+
 	securityOpts := []string{
 		"no-new-privileges",
 	}
@@ -33,11 +67,16 @@ func (h *handler) startContainer() (string, *websocket.Conn, error) {
 
 	dropCaps := &strslice.StrSlice{"NET_RAW"}
 
+	port, err := generatePort(ctrInfo.port)
+	if err != nil {
+		return "", nil, err
+	}
+
 	// create the container
 	r, err := h.dcli.ContainerCreate(
 		context.Background(),
 		&container.Config{
-			Image:        defaultDockerImage,
+			Image:        image,
 			Cmd:          []string{"sh"},
 			Tty:          true,
 			AttachStdin:  true,
@@ -45,16 +84,27 @@ func (h *handler) startContainer() (string, *websocket.Conn, error) {
 			AttachStderr: true,
 			OpenStdin:    true,
 			StdinOnce:    true,
+			ExposedPorts: nat.PortSet{
+				port: struct{}{},
+			},
 		},
 		&container.HostConfig{
 			SecurityOpt: securityOpts,
 			CapDrop:     *dropCaps,
-			NetworkMode: "none",
+			NetworkMode: "default",
 			LogConfig: container.LogConfig{
 				Type: "none",
 			},
 			Resources: container.Resources{
 				PidsLimit: 5,
+			},
+			PortBindings: map[nat.Port][]nat.PortBinding{
+				port: []nat.PortBinding{
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: ctrInfo.port,
+					},
+				},
 			},
 		},
 		nil, "")

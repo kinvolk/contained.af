@@ -47,32 +47,18 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "pong")
 }
 
-// infoHander returns information about the connected docker daemon.
-func (h *handler) infoHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		w.WriteHeader(http.StatusNotFound)
-		return
+func constructContainerInfo(r *http.Request) containerInfo {
+	var c containerInfo
+	if len(r.URL.Query()["port"]) > 0 {
+		c.port = r.URL.Query()["port"][0]
 	}
-
-	info, err := h.dcli.Info(context.Background())
-	if err != nil {
-		logrus.Errorf("getting docker info failed: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+	if len(r.URL.Query()["image"]) > 0 {
+		c.dockerImage = r.URL.Query()["image"][0]
 	}
-
-	b, err := json.MarshalIndent(info, "", "  ")
-	if err != nil {
-		logrus.Errorf("marshal indent info failed: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "%s", b)
+	return c
 }
 
-func (h *handler) websocketHandler(w http.ResponseWriter, r *http.Request) {
+func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		logrus.Errorf("websocket upgrader failed: %v", err)
@@ -80,7 +66,9 @@ func (h *handler) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// start the container and create the container websocket connection
-	cid, containerWSConn, err := h.startContainer()
+	cid, containerWSConn, err := h.startContainer(
+		constructContainerInfo(r),
+	)
 	if err != nil {
 		logrus.Errorf("starting container failed: %v", err)
 		return
@@ -189,4 +177,29 @@ func (h *handler) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	if err := h.removeContainer(cid); err != nil {
 		logrus.Errorf("removing container %s failed: %v", cid, err)
 	}
+}
+
+// infoHander returns information about the connected docker daemon.
+func (h *handler) infoHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	info, err := h.dcli.Info(context.Background())
+	if err != nil {
+		logrus.Errorf("getting docker info failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	b, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		logrus.Errorf("marshal indent info failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "%s", b)
 }

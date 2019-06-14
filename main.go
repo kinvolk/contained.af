@@ -118,19 +118,14 @@ func main() {
 			tlsConfig: &tlsConfig,
 		}
 
-		// pull alpine image if we don't already have it
-		if err := h.pullImage(defaultDockerImage); err != nil {
-			logrus.Fatalf("pulling %s failed: %v", defaultDockerImage, err)
-		}
-
-		// websocket handler
-		http.HandleFunc("/term", h.websocketHandler)
-
 		// ping handler
 		http.HandleFunc("/ping", pingHandler)
 
 		// info handler
 		http.HandleFunc("/info", h.infoHandler)
+
+		// select profiles and websocket handling
+		http.HandleFunc("/profiles", h.profilesHandler)
 
 		// static files
 		http.Handle("/", http.FileServer(http.Dir(staticDir)))

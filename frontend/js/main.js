@@ -117,10 +117,13 @@
 		var proto = 'ws';
 		if (location.protocol == "https:"){
 			proto = 'wss';
-		}
+        }
+
+        var urlParams = new URLSearchParams(window.location.search);
+        console.log("params in main: ", urlParams.toString());
 
 		// create the socket
-		var socket = new WebSocket(proto+'://'+location.host+"/term");
+		var socket = new WebSocket(proto+'://'+location.host+"/profiles?"+urlParams.toString());
 
 		var term = new Terminal({
 			cursorBlink: true
