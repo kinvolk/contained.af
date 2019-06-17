@@ -25,8 +25,14 @@ var upgrader = websocket.Upgrader{
 }
 
 type handler struct {
+	// parameters for normal docker daemon
 	dcli      *client.Client
 	dockerURL *url.URL
+
+	// parameters for docker daemon with user namespace enabled
+	dUserNSCli      *client.Client
+	dockerUserNSURL *url.URL
+
 	tlsConfig *tls.Config
 }
 
@@ -185,21 +191,40 @@ func (h *handler) infoHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-
-	info, err := h.dcli.Info(context.Background())
-	if err != nil {
-		logrus.Errorf("getting docker info failed: %v", err)
+	if err := retrieveInfo(w, r, h.dcli); err != nil {
+		logrus.Errorf("docker: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+}
+
+// infoUserNSHandler returns information about the connected docker daemon that
+// supports user namespace
+func (h *handler) infoUserNSHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if err := retrieveInfo(w, r, h.dUserNSCli); err != nil {
+		logrus.Errorf("docker user namespace: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func retrieveInfo(w http.ResponseWriter, r *http.Request, client *client.Client) error {
+
+	info, err := client.Info(context.Background())
+	if err != nil {
+		return fmt.Errorf("getting docker info failed: %v", err)
 	}
 
 	b, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
-		logrus.Errorf("marshal indent info failed: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return fmt.Errorf("marshal indent info failed: %v", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "%s", b)
+	return nil
 }

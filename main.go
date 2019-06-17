@@ -17,16 +17,18 @@ import (
 )
 
 const (
-	defaultStaticDir   = "/usr/src/contained.af"
-	defaultDockerHost  = "http://127.0.0.1:2375"
-	defaultDockerImage = "alpine:latest"
+	defaultStaticDir        = "/usr/src/contained.af"
+	defaultDockerHost       = "http://127.0.0.1:2375"
+	defaultDockerUserNSHost = "http://127.0.0.1:2376"
+	defaultDockerImage      = "alpine:latest"
 )
 
 var (
-	dockerHost   string
-	dockerCACert string
-	dockerCert   string
-	dockerKey    string
+	dockerHost       string
+	dockerUserNSHost string
+	dockerCACert     string
+	dockerCert       string
+	dockerKey        string
 
 	staticDir string
 	port      string
@@ -47,6 +49,7 @@ func main() {
 	// Setup the global flags.
 	p.FlagSet = flag.NewFlagSet("global", flag.ExitOnError)
 	p.FlagSet.StringVar(&dockerHost, "dhost", defaultDockerHost, "host to commmunicate with docker on")
+	p.FlagSet.StringVar(&dockerUserNSHost, "dusernshost", defaultDockerUserNSHost, "host to communicate with user namespace enabled docker on")
 	p.FlagSet.StringVar(&dockerCACert, "dcacert", "", "trust certs signed only by this CA for docker host")
 	p.FlagSet.StringVar(&dockerCert, "dcert", "", "path to TLS certificate file for docker host")
 	p.FlagSet.StringVar(&dockerKey, "dkey", "", "path to TLS key file for docker host")
@@ -70,7 +73,12 @@ func main() {
 	p.Action = func(ctx context.Context, args []string) error {
 		dockerURL, err := url.Parse(dockerHost)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("parsing docker daemon URL: %v", err)
+		}
+
+		dockerUserNSURL, err := url.Parse(dockerUserNSHost)
+		if err != nil {
+			logrus.Fatalf("parsing user namespace enabled docker daemon URL: %v", err)
 		}
 
 		// setup client TLS
@@ -109,13 +117,21 @@ func main() {
 		defaultHeaders := map[string]string{"User-Agent": "engine-api-cli-1.0"}
 		dcli, err := client.NewClient(dockerHost, "", c, defaultHeaders)
 		if err != nil {
-			logrus.Fatal(err)
+			logrus.Fatalf("creating docker client: %v", err)
+		}
+
+		dockerUserNSCLI, err := client.NewClient(dockerUserNSHost, "", c, defaultHeaders)
+		if err != nil {
+			logrus.Fatalf("creating user namespace enabled docker client: %v", err)
 		}
 
 		h := &handler{
 			dcli:      dcli,
 			dockerURL: dockerURL,
 			tlsConfig: &tlsConfig,
+
+			dUserNSCli:      dockerUserNSCLI,
+			dockerUserNSURL: dockerUserNSURL,
 		}
 
 		// ping handler
@@ -123,6 +139,7 @@ func main() {
 
 		// info handler
 		http.HandleFunc("/info", h.infoHandler)
+		http.HandleFunc("/info-userns", h.infoUserNSHandler)
 
 		// select profiles and websocket handling
 		http.HandleFunc("/profiles", h.profilesHandler)
