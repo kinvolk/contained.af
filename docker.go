@@ -146,7 +146,7 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 		withDockerImage(ctrInfo.dockerImage))
 	ctrHostCfg := NewContainerHostConfig(
 		withExposedPort(port),
-		withSecurityOptions(seccompProfile),
+		withSecurityOptions(seccompDefaultProfile),
 	)
 
 	// pull container image if we don't already have it
