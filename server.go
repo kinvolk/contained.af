@@ -53,15 +53,25 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "pong")
 }
 
-func constructContainerInfo(r *http.Request) containerInfo {
+func constructContainerInfo(r *http.Request) (*containerInfo, error) {
 	var c containerInfo
 	if len(r.URL.Query()["port"]) > 0 {
 		c.port = r.URL.Query()["port"][0]
 	}
+
 	if len(r.URL.Query()["image"]) > 0 {
 		c.dockerImage = r.URL.Query()["image"][0]
 	}
-	return c
+
+	if len(r.URL.Query()["profile"]) > 0 {
+		c.dockerProfile = dockerProfile(r.URL.Query()["profile"][0])
+
+		if _, ok := dockerProfiles[c.dockerProfile]; !ok {
+			return nil, fmt.Errorf("Docker profile %q is invalid.", c.dockerProfile)
+		}
+	}
+
+	return &c, nil
 }
 
 func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
@@ -71,10 +81,14 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctrInfo, err := constructContainerInfo(r)
+	if err != nil {
+		logrus.Errorf("generating container info failed: %v", err)
+		return
+	}
+
 	// start the container and create the container websocket connection
-	cid, containerWSConn, err := h.startContainer(
-		constructContainerInfo(r),
-	)
+	cid, containerWSConn, err := h.startContainer(*ctrInfo)
 	if err != nil {
 		logrus.Errorf("starting container failed: %v", err)
 		return
