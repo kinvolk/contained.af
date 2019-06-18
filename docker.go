@@ -11,7 +11,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/term"
@@ -117,7 +116,6 @@ func NewContainerConfig(opts ...containerOptions) *container.Config {
 
 func NewContainerHostConfig(opts ...hostOptions) *container.HostConfig {
 	cfg := &container.HostConfig{
-		CapDrop:     strslice.StrSlice{"NET_RAW"},
 		NetworkMode: "default",
 		LogConfig: container.LogConfig{
 			Type: "none",
