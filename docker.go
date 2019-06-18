@@ -11,7 +11,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/term"
@@ -25,7 +24,7 @@ type containerInfo struct {
 	port        string
 }
 
-func generatePort(portStr string) (nat.Port, error) {
+func validatePort(portStr string) (nat.Port, error) {
 	if portStr == "" {
 		return "", nil
 	}
@@ -42,72 +41,122 @@ func generatePort(portStr string) (nat.Port, error) {
 	return port, nil
 }
 
+type containerOptions func(cfg *container.Config)
+
+func withPort(port nat.Port) containerOptions {
+	return func(ctrCfg *container.Config) {
+		if port == "" {
+			return
+		}
+		ctrCfg.ExposedPorts = nat.PortSet{
+			port: struct{}{},
+		}
+	}
+}
+
+func withDockerImage(image string) containerOptions {
+	return func(cfg *container.Config) {
+		cfg.Image = image
+		if image == "" {
+			// Use default docker image when user does not provide any
+			cfg.Image = defaultDockerImage
+		}
+	}
+}
+
+type hostOptions func(cfg *container.HostConfig)
+
+func withExposedPort(port nat.Port) hostOptions {
+	return func(cfg *container.HostConfig) {
+		if port == "" {
+			return
+		}
+		cfg.PortBindings = map[nat.Port][]nat.PortBinding{
+			port: []nat.PortBinding{
+				{
+					HostIP:   "0.0.0.0",
+					HostPort: string(port),
+				},
+			},
+		}
+	}
+}
+
+func withSecurityOptions(seccompProfile string) hostOptions {
+	return func(cfg *container.HostConfig) {
+		b := bytes.NewBuffer(nil)
+		if err := json.Compact(b, []byte(seccompProfile)); err != nil {
+			// this should be caught while development itself and not during runtime
+			panic(fmt.Sprintf("compacting json for seccomp profile failed: %v", err))
+		}
+		cfg.SecurityOpt = []string{
+			"no-new-privileges",
+			fmt.Sprintf("seccomp=%s", b.Bytes()),
+		}
+	}
+}
+
+func NewContainerConfig(opts ...containerOptions) *container.Config {
+	cfg := &container.Config{
+		Cmd:          []string{"sh"},
+		Tty:          true,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		OpenStdin:    true,
+		StdinOnce:    true,
+	}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	return cfg
+}
+
+func NewContainerHostConfig(opts ...hostOptions) *container.HostConfig {
+	cfg := &container.HostConfig{
+		NetworkMode: "default",
+		LogConfig: container.LogConfig{
+			Type: "none",
+		},
+		Resources: container.Resources{
+			PidsLimit: 5,
+		},
+	}
+
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	return cfg
+
+}
+
 // startContainer starts a docker container and returns the container ID
 // as well as a websocket connection to the attach endpoint.
 func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn, error) {
-	image := ctrInfo.dockerImage
-	// Use default docker image when user does not provide any
-	if image == "" {
-		image = defaultDockerImage
-	}
-
-	// pull container image if we don't already have it
-	if err := h.pullImage(image); err != nil {
-		return "", nil, fmt.Errorf("pulling %s failed: %v", image, err)
-	}
-
-	securityOpts := []string{
-		"no-new-privileges",
-	}
-	b := bytes.NewBuffer(nil)
-	if err := json.Compact(b, []byte(seccompProfile)); err != nil {
-		return "", nil, fmt.Errorf("compacting json for seccomp profile failed: %v", err)
-	}
-	securityOpts = append(securityOpts, fmt.Sprintf("seccomp=%s", b.Bytes()))
-
-	dropCaps := &strslice.StrSlice{"NET_RAW"}
-
-	port, err := generatePort(ctrInfo.port)
+	port, err := validatePort(ctrInfo.port)
 	if err != nil {
 		return "", nil, err
 	}
 
+	ctrCfg := NewContainerConfig(
+		withPort(port),
+		withDockerImage(ctrInfo.dockerImage))
+	ctrHostCfg := NewContainerHostConfig(
+		withExposedPort(port),
+		withSecurityOptions(seccompProfile),
+	)
+
+	// pull container image if we don't already have it
+	if err := h.pullImage(ctrCfg.Image); err != nil {
+		return "", nil, fmt.Errorf("pulling %s failed: %v", ctrCfg.Image, err)
+	}
+
 	// create the container
-	r, err := h.dcli.ContainerCreate(
-		context.Background(),
-		&container.Config{
-			Image:        image,
-			Cmd:          []string{"sh"},
-			Tty:          true,
-			AttachStdin:  true,
-			AttachStdout: true,
-			AttachStderr: true,
-			OpenStdin:    true,
-			StdinOnce:    true,
-			ExposedPorts: nat.PortSet{
-				port: struct{}{},
-			},
-		},
-		&container.HostConfig{
-			SecurityOpt: securityOpts,
-			CapDrop:     *dropCaps,
-			NetworkMode: "default",
-			LogConfig: container.LogConfig{
-				Type: "none",
-			},
-			Resources: container.Resources{
-				PidsLimit: 5,
-			},
-			PortBindings: map[nat.Port][]nat.PortBinding{
-				port: []nat.PortBinding{
-					{
-						HostIP:   "0.0.0.0",
-						HostPort: ctrInfo.port,
-					},
-				},
-			},
-		},
-		nil, "")
+	r, err := h.dcli.ContainerCreate(context.Background(), ctrCfg,
+		ctrHostCfg, nil, "")
 	if err != nil {
 		return "", nil, err
 	}
