@@ -38,6 +38,8 @@ var dockerProfiles = map[dockerProfile]struct{}{
 type containerInfo struct {
 	dockerImage   string
 	port          string
+	userns        bool
+	containerid   string
 	dockerProfile dockerProfile
 }
 
@@ -194,10 +196,10 @@ func NewContainerHostConfig(opts ...hostOptions) *container.HostConfig {
 
 // startContainer starts a docker container and returns the container ID
 // as well as a websocket connection to the attach endpoint.
-func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn, error) {
+func (h *handler) startContainer(ctrInfo *containerInfo) (*websocket.Conn, error) {
 	port, err := validatePort(ctrInfo.port)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 
 	ctrCfg := NewContainerConfig(
@@ -213,48 +215,57 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 		withCapabilities(ctrInfo.dockerProfile),
 	)
 
+	// using ctrCfg.Image because it is updated to be default/user given
+	ctrInfo.dockerImage = ctrCfg.Image
+
 	// pull container image if we don't already have it
-	if err := h.pullImage(ctrCfg.Image); err != nil {
-		return "", nil, fmt.Errorf("pulling %s failed: %v", ctrCfg.Image, err)
+	if err := h.pullImage(ctrInfo); err != nil {
+		return nil, fmt.Errorf("pulling %s failed: %v", ctrCfg.Image, err)
 	}
 
 	// create the container
-	r, err := h.dcli.ContainerCreate(context.Background(), ctrCfg,
+	r, err := h.client(ctrInfo.userns).ContainerCreate(context.Background(), ctrCfg,
 		ctrHostCfg, nil, "")
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
+	ctrInfo.containerid = r.ID
 
 	// connect to the attach websocket endpoint
 	header := http.Header(make(map[string][]string))
-	header.Add("Origin", h.dockerURL.String())
+	header.Add("Origin", h.url(ctrInfo.userns).String())
 	v := url.Values{
 		"stdin":  []string{"1"},
 		"stdout": []string{"1"},
 		"stderr": []string{"1"},
 		"stream": []string{"1"},
 	}
-	wsURL := fmt.Sprintf("ws://%s/%s/containers/%s/attach/ws?%s", h.dockerURL.Host, dockerAPIVersion, r.ID, v.Encode())
+	wsURL := fmt.Sprintf("ws://%s/%s/containers/%s/attach/ws?%s",
+		h.url(ctrInfo.userns).Host, dockerAPIVersion, r.ID, v.Encode())
 	var dialer = &websocket.Dialer{
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: h.tlsConfig,
 	}
 	conn, _, err := dialer.Dial(wsURL, header)
 	if err != nil {
-		return r.ID, nil, fmt.Errorf("dialing %s with header %#v failed: %v", wsURL, header, err)
+		return nil, fmt.Errorf("dialing %s with header %#v failed: %v",
+			wsURL, header, err)
 	}
 
 	// start the container
-	if err := h.dcli.ContainerStart(context.Background(), r.ID, types.ContainerStartOptions{}); err != nil {
-		return r.ID, conn, err
+	if err := h.client(ctrInfo.userns).ContainerStart(context.Background(),
+		r.ID, types.ContainerStartOptions{}); err != nil {
+		return conn, err
 	}
 
-	return r.ID, conn, nil
+	return conn, nil
 }
 
 // removeContainer removes with force a container by it's container ID.
-func (h *handler) removeContainer(cid string) error {
-	if err := h.dcli.ContainerRemove(context.Background(), cid,
+func (h *handler) removeContainer(ctrInfo *containerInfo) error {
+	if err := h.client(ctrInfo.userns).ContainerRemove(
+		context.Background(),
+		ctrInfo.containerid,
 		types.ContainerRemoveOptions{
 			RemoveVolumes: true,
 			Force:         true,
@@ -262,14 +273,14 @@ func (h *handler) removeContainer(cid string) error {
 		return err
 	}
 
-	logrus.Debugf("removed container: %s", cid)
+	logrus.Debugf("removed container: %s", ctrInfo.containerid)
 
 	return nil
 }
 
 // pullImage requests a docker image if it doesn't exist already.
-func (h *handler) pullImage(image string) error {
-	exists, err := h.imageExists(image)
+func (h *handler) pullImage(ctrInfo *containerInfo) error {
+	exists, err := h.imageExists(ctrInfo)
 	if err != nil {
 		return err
 	}
@@ -278,7 +289,8 @@ func (h *handler) pullImage(image string) error {
 		return nil
 	}
 
-	resp, err := h.dcli.ImagePull(context.Background(), image, types.ImagePullOptions{})
+	resp, err := h.client(ctrInfo.userns).ImagePull(context.Background(),
+		ctrInfo.dockerImage, types.ImagePullOptions{})
 	if err != nil {
 		return err
 	}
@@ -289,8 +301,9 @@ func (h *handler) pullImage(image string) error {
 }
 
 // imageExists checks if a docker image exists.
-func (h *handler) imageExists(image string) (bool, error) {
-	_, _, err := h.dcli.ImageInspectWithRaw(context.Background(), image)
+func (h *handler) imageExists(ctrInfo *containerInfo) (bool, error) {
+	_, _, err := h.client(ctrInfo.userns).ImageInspectWithRaw(
+		context.Background(), ctrInfo.dockerImage)
 	if err == nil {
 		return true, nil
 	}

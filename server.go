@@ -36,6 +36,19 @@ type handler struct {
 	tlsConfig *tls.Config
 }
 
+func (h *handler) client(userns bool) *client.Client {
+	if userns {
+		return h.dUserNSCli
+	}
+	return h.dcli
+}
+func (h *handler) url(userns bool) *url.URL {
+	if userns {
+		return h.dockerUserNSURL
+	}
+	return h.dockerURL
+}
+
 type message struct {
 	Type   string `json:"type"`
 	Data   string `json:"data"`
@@ -71,6 +84,12 @@ func constructContainerInfo(r *http.Request) (*containerInfo, error) {
 		}
 	}
 
+	if len(r.URL.Query()["userns"]) > 0 {
+		val := r.URL.Query()["userns"][0]
+		if val == "enabled" {
+			c.userns = true
+		}
+	}
 	return &c, nil
 }
 
@@ -88,13 +107,13 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// start the container and create the container websocket connection
-	cid, containerWSConn, err := h.startContainer(*ctrInfo)
+	containerWSConn, err := h.startContainer(ctrInfo)
 	if err != nil {
 		logrus.Errorf("starting container failed: %v", err)
 		return
 	}
 	defer containerWSConn.Close()
-	logrus.Infof("container started with id: %s", cid)
+	logrus.Infof("container started with id: %s", ctrInfo.containerid)
 
 	// start a go routine to listen on the container websocket and send to the browser websocket
 	done := make(chan struct{})
@@ -109,8 +128,8 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 				if e, ok := err.(*websocket.CloseError); ok {
 					logrus.Warnf("container websocket closed %s %d", e.Text, e.Code)
 					// cleanup and remove the container
-					if err := h.removeContainer(cid); err != nil {
-						logrus.Errorf("removing container %s failed: %v", cid, err)
+					if err := h.removeContainer(ctrInfo); err != nil {
+						logrus.Errorf("removing container %s failed: %v", ctrInfo.containerid, err)
 					}
 					// cleanly close the browser connection
 					if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
@@ -135,8 +154,8 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 				if err == websocket.ErrCloseSent {
 					logrus.Warn("browser websocket close sent")
 					// cleanup and remove the container
-					if err := h.removeContainer(cid); err != nil {
-						logrus.Errorf("removing container %s failed: %v", cid, err)
+					if err := h.removeContainer(ctrInfo); err != nil {
+						logrus.Errorf("removing container %s failed: %v", ctrInfo.containerid, err)
 					}
 					break
 				}
@@ -153,8 +172,8 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 			if e, ok := err.(*websocket.CloseError); ok {
 				logrus.Warnf("browser websocket closed %s %d", e.Text, e.Code)
 				// cleanup and remove the container
-				if err := h.removeContainer(cid); err != nil {
-					logrus.Errorf("removing container %s failed: %v", cid, err)
+				if err := h.removeContainer(ctrInfo); err != nil {
+					logrus.Errorf("removing container %s failed: %v", ctrInfo.containerid, err)
 				}
 				break
 			}
@@ -171,8 +190,8 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 					if err == websocket.ErrCloseSent {
 						logrus.Warn("container websocket close sent")
 						// cleanup and remove the container
-						if err := h.removeContainer(cid); err != nil {
-							logrus.Errorf("removing container %s failed: %v", cid, err)
+						if err := h.removeContainer(ctrInfo); err != nil {
+							logrus.Errorf("removing container %s failed: %v", ctrInfo.containerid, err)
 						}
 						break
 					}
@@ -182,7 +201,7 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 				logrus.Debugf("wrote to container websocket: %q", data.Data)
 			}
 		case "resize":
-			if err := h.dcli.ContainerResize(context.Background(), cid, types.ResizeOptions{
+			if err := h.dcli.ContainerResize(context.Background(), ctrInfo.containerid, types.ResizeOptions{
 				Height: data.Height,
 				Width:  data.Width,
 			}); err != nil {
@@ -194,8 +213,8 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// cleanup and remove the container
-	if err := h.removeContainer(cid); err != nil {
-		logrus.Errorf("removing container %s failed: %v", cid, err)
+	if err := h.removeContainer(ctrInfo); err != nil {
+		logrus.Errorf("removing container %s failed: %v", ctrInfo.containerid, err)
 	}
 }
 
