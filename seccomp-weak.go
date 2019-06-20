@@ -4,7 +4,7 @@ const (
 	// This profile allows `unshare` syscall, to see the difference between this
 	// profile and the default one run following command:
 	// diff -u seccomp.go seccomp-weak.go
-	seccompWeakProfile = `{
+	weakSeccompConfig = `{
 		"defaultAction": "SCMP_ACT_ERRNO",
 		"archMap": [
 			{
