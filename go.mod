@@ -7,7 +7,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/distribution v0.0.0-20180920194744-16128bbac47f // indirect
 	github.com/docker/docker v0.0.0-20180924202107-a9c061deec0f
-	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.3.3 // indirect
 	github.com/genuinetools/pkg v0.0.0-20180910213200-1c141f661797
 	github.com/gogo/protobuf v1.1.1 // indirect
