@@ -19,9 +19,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// dockerProfile is an abstraction to support different configuration sets for running
+// containers. More information is available here about the supported profiles and their meanings:
+// https://github.com/kinvolk/container-escape-bounty/blob/master/Documentation/profiles.md
+type dockerProfile string
+
+var (
+	defaultDockerProfile dockerProfile = "default-docker"
+	weakDockerProfile    dockerProfile = "weak-docker"
+)
+
+var dockerProfiles = map[dockerProfile]struct{}{
+	defaultDockerProfile: struct{}{},
+	weakDockerProfile:    struct{}{},
+}
+
 type containerInfo struct {
-	dockerImage string
-	port        string
+	dockerImage   string
+	port          string
+	dockerProfile dockerProfile
 }
 
 func validatePort(portStr string) (nat.Port, error) {
@@ -61,6 +77,18 @@ func withDockerImage(image string) containerOptions {
 			// Use default docker image when user does not provide any
 			cfg.Image = defaultDockerImage
 		}
+	}
+}
+
+func withDockerUser(profile dockerProfile) containerOptions {
+	return func(cfg *container.Config) {
+		// By default, use the defaultDockerProfile.
+		user := "nobody"
+		if profile == weakDockerProfile {
+			user = ""
+		}
+
+		cfg.User = user
 	}
 }
 
@@ -143,7 +171,10 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 
 	ctrCfg := NewContainerConfig(
 		withPort(port),
-		withDockerImage(ctrInfo.dockerImage))
+		withDockerImage(ctrInfo.dockerImage),
+		withDockerUser(ctrInfo.dockerProfile),
+	)
+
 	ctrHostCfg := NewContainerHostConfig(
 		withExposedPort(port),
 		withSecurityOptions(seccompDefaultProfile),
