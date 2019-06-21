@@ -39,8 +39,11 @@ dind: stop-dind ## Starts a docker-in-docker container for running the tests wit
 stop-dind: ## Stops the docker-in-docker container.
 	@docker rm -f $(NAME)-dind >/dev/null 2>&1 || true
 
+setuphostdir:
+	REGISTRY=$(REGISTRY) ./scripts/setup-host-dir.sh
+
 .PHONY: run
-run: dind image ## Run the server locally in a docker container.
+run: dind setuphostdir image ## Run the server locally in a docker container.
 	docker run --rm -i $(DOCKER_FLAGS) \
 		-v $(CURDIR)/.certs:/etc/docker/ssl:ro \
 		--net container:$(NAME)-dind \
