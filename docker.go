@@ -11,6 +11,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/term"
@@ -130,6 +131,22 @@ func withSecurityOptions(profile dockerProfile) hostOptions {
 	}
 }
 
+func withHostVolumes(profile dockerProfile) hostOptions {
+	return func(cfg *container.HostConfig) {
+		if profile == weakDockerProfile {
+			cfg.Mounts = []mount.Mount{
+				{
+					Type:        mount.TypeBind,
+					Source:      "/var/tmp/shared",
+					Target:      "/var/tmp/shared",
+					ReadOnly:    false,
+					Consistency: mount.ConsistencyDefault,
+				},
+			}
+		}
+	}
+}
+
 func NewContainerConfig(opts ...containerOptions) *container.Config {
 	cfg := &container.Config{
 		Cmd:          []string{"sh"},
@@ -184,6 +201,7 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 	ctrHostCfg := NewContainerHostConfig(
 		withExposedPort(port),
 		withSecurityOptions(ctrInfo.dockerProfile),
+		withHostVolumes(ctrInfo.dockerProfile),
 	)
 
 	// pull container image if we don't already have it
