@@ -1,10 +1,10 @@
 package main
 
 const (
-	// This profile allows `unshare` syscall, to see the difference between this
-	// profile and the default one run following command:
-	// diff -u seccomp.go seccomp-weak.go
-	weakSeccompConfig = `{
+	// This profile comes from the Moby Project, licensed under Apache-2.0:
+	// https://github.com/moby/moby/blob/238f8eaa31aa74be843c81703fabf774863ec30c/profiles/seccomp/default.json
+	// You can find the authors at https://github.com/moby/moby/blob/238f8eaa31aa74be843c81703fabf774863ec30c/AUTHORS
+	defaultSeccompConfig = `{
 		"defaultAction": "SCMP_ACT_ERRNO",
 		"archMap": [
 			{
@@ -581,7 +581,8 @@ const (
 					"setns",
 					"syslog",
 					"umount",
-					"umount2"
+					"umount2",
+					"unshare"
 				],
 				"action": "SCMP_ACT_ALLOW",
 				"args": [],
@@ -591,16 +592,6 @@ const (
 						"CAP_SYS_ADMIN"
 					]
 				},
-				"excludes": {}
-			},
-			{
-				"names": [
-					"unshare"
-				],
-				"action": "SCMP_ACT_ALLOW",
-				"args": [],
-				"comment": "",
-				"includes": {},
 				"excludes": {}
 			},
 			{

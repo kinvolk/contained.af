@@ -110,10 +110,16 @@ func withExposedPort(port nat.Port) hostOptions {
 	}
 }
 
-func withSecurityOptions(seccompProfile string) hostOptions {
+func withSecurityOptions(profile dockerProfile) hostOptions {
+	seccompConfig, ok := seccompConfigs[profile]
+	if !ok {
+		// TODO: Look into returning an error instead.
+		panic(fmt.Sprintf("seccomp config not found for profile: %q", profile))
+	}
+
 	return func(cfg *container.HostConfig) {
 		b := bytes.NewBuffer(nil)
-		if err := json.Compact(b, []byte(seccompProfile)); err != nil {
+		if err := json.Compact(b, []byte(seccompConfig)); err != nil {
 			// this should be caught while development itself and not during runtime
 			panic(fmt.Sprintf("compacting json for seccomp profile failed: %v", err))
 		}
@@ -177,7 +183,7 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 
 	ctrHostCfg := NewContainerHostConfig(
 		withExposedPort(port),
-		withSecurityOptions(seccompDefaultProfile),
+		withSecurityOptions(ctrInfo.dockerProfile),
 	)
 
 	// pull container image if we don't already have it
