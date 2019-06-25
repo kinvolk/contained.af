@@ -147,6 +147,14 @@ func withHostVolumes(profile dockerProfile) hostOptions {
 	}
 }
 
+func withCapabilities(profile dockerProfile) hostOptions {
+	return func(cfg *container.HostConfig) {
+		if profile == weakDockerProfile {
+			cfg.CapAdd = []string{"NET_ADMIN", "SYS_PTRACE", "SYS_CHROOT"}
+		}
+	}
+}
+
 func NewContainerConfig(opts ...containerOptions) *container.Config {
 	cfg := &container.Config{
 		Cmd:          []string{"sh"},
@@ -202,6 +210,7 @@ func (h *handler) startContainer(ctrInfo containerInfo) (string, *websocket.Conn
 		withExposedPort(port),
 		withSecurityOptions(ctrInfo.dockerProfile),
 		withHostVolumes(ctrInfo.dockerProfile),
+		withCapabilities(ctrInfo.dockerProfile),
 	)
 
 	// pull container image if we don't already have it
