@@ -95,12 +95,12 @@ func withDockerUser(profile dockerProfile) containerOptions {
 	}
 }
 
-type hostOptions func(cfg *container.HostConfig)
+type hostOptions func(cfg *container.HostConfig) error
 
 func withExposedPort(port nat.Port) hostOptions {
-	return func(cfg *container.HostConfig) {
+	return func(cfg *container.HostConfig) error {
 		if port == "" {
-			return
+			return nil
 		}
 		cfg.PortBindings = map[nat.Port][]nat.PortBinding{
 			port: []nat.PortBinding{
@@ -110,17 +110,17 @@ func withExposedPort(port nat.Port) hostOptions {
 				},
 			},
 		}
+		return nil
 	}
 }
 
 func withSecurityOptions(profile dockerProfile) hostOptions {
-	seccompConfig, ok := seccompConfigs[profile]
-	if !ok {
-		// TODO: Look into returning an error instead.
-		panic(fmt.Sprintf("seccomp config not found for profile: %q", profile))
-	}
+	return func(cfg *container.HostConfig) error {
+		seccompConfig, ok := seccompConfigs[profile]
+		if !ok {
+			return fmt.Errorf("seccomp config not found for profile: %q", profile)
+		}
 
-	return func(cfg *container.HostConfig) {
 		b := bytes.NewBuffer(nil)
 		if err := json.Compact(b, []byte(seccompConfig)); err != nil {
 			// this should be caught while development itself and not during runtime
@@ -130,11 +130,12 @@ func withSecurityOptions(profile dockerProfile) hostOptions {
 			"no-new-privileges",
 			fmt.Sprintf("seccomp=%s", b.Bytes()),
 		}
+		return nil
 	}
 }
 
 func withHostVolumes(profile dockerProfile) hostOptions {
-	return func(cfg *container.HostConfig) {
+	return func(cfg *container.HostConfig) error {
 		if profile == weakDockerProfile {
 			cfg.Mounts = []mount.Mount{
 				{
@@ -146,14 +147,16 @@ func withHostVolumes(profile dockerProfile) hostOptions {
 				},
 			}
 		}
+		return nil
 	}
 }
 
 func withCapabilities(profile dockerProfile) hostOptions {
-	return func(cfg *container.HostConfig) {
+	return func(cfg *container.HostConfig) error {
 		if profile == weakDockerProfile {
 			cfg.CapAdd = []string{"NET_ADMIN", "SYS_PTRACE", "SYS_CHROOT"}
 		}
+		return nil
 	}
 }
 
@@ -175,7 +178,7 @@ func NewContainerConfig(opts ...containerOptions) *container.Config {
 	return cfg
 }
 
-func NewContainerHostConfig(opts ...hostOptions) *container.HostConfig {
+func NewContainerHostConfig(opts ...hostOptions) (*container.HostConfig, error) {
 	cfg := &container.HostConfig{
 		NetworkMode: "default",
 		LogConfig: container.LogConfig{
@@ -187,11 +190,12 @@ func NewContainerHostConfig(opts ...hostOptions) *container.HostConfig {
 	}
 
 	for _, opt := range opts {
-		opt(cfg)
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
 	}
 
-	return cfg
-
+	return cfg, nil
 }
 
 // startContainer starts a docker container and returns the container ID
@@ -208,12 +212,15 @@ func (h *handler) startContainer(ctrInfo *containerInfo) (*websocket.Conn, error
 		withDockerUser(ctrInfo.dockerProfile),
 	)
 
-	ctrHostCfg := NewContainerHostConfig(
+	ctrHostCfg, err := NewContainerHostConfig(
 		withExposedPort(port),
 		withSecurityOptions(ctrInfo.dockerProfile),
 		withHostVolumes(ctrInfo.dockerProfile),
 		withCapabilities(ctrInfo.dockerProfile),
 	)
+	if err != nil {
+		return "", nil, fmt.Errorf("creating container host config: %v", err)
+	}
 
 	// using ctrCfg.Image because it is updated to be default/user given
 	ctrInfo.dockerImage = ctrCfg.Image
