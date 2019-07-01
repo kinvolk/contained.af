@@ -47,6 +47,22 @@
                 <option value="enabled">Enabled</option>
             </select>
 
+        {{if eq .OperatingSystem "fedora"}}
+            <br><br>
+            SELinux:
+            <select name="selinux">
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled</option>
+            </select>
+        {{else if eq .OperatingSystem "ubuntu"}}
+            <br><br>
+            Apparmor:
+            <select name="apparmor">
+                <option value="enabled">Enabled</option>
+                <option value="disabled">Disabled</option>
+            </select>
+        {{end}}
+
             <br><br><br>
             <input type = "submit" name = "submit" value = "Submit" />
             <br>

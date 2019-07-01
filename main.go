@@ -6,9 +6,12 @@ import (
 	"crypto/x509"
 	"flag"
 	"fmt"
+	"html/template"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 
 	"github.com/docker/docker/client"
 	"github.com/genuinetools/contained.af/version"
@@ -37,6 +40,7 @@ var (
 )
 
 func main() {
+	var hostOS string
 	// Create a new cli program.
 	p := cli.NewProgram()
 	p.Name = "contained.af"
@@ -53,6 +57,7 @@ func main() {
 	p.FlagSet.StringVar(&dockerCACert, "dcacert", "", "trust certs signed only by this CA for docker host")
 	p.FlagSet.StringVar(&dockerCert, "dcert", "", "path to TLS certificate file for docker host")
 	p.FlagSet.StringVar(&dockerKey, "dkey", "", "path to TLS key file for docker host")
+	p.FlagSet.StringVar(&hostOS, "os", "", "operating system of the docker host")
 
 	p.FlagSet.StringVar(&staticDir, "frontend", defaultStaticDir, "directory that holds the static frontend files")
 	p.FlagSet.StringVar(&port, "port", "10000", "port for server")
@@ -71,6 +76,10 @@ func main() {
 
 	// Set the main program action.
 	p.Action = func(ctx context.Context, args []string) error {
+		if err := renderIndexPage(hostOS); err != nil {
+			logrus.Fatal(err)
+		}
+
 		dockerURL, err := url.Parse(dockerHost)
 		if err != nil {
 			logrus.Fatalf("parsing docker daemon URL: %v", err)
@@ -156,6 +165,30 @@ func main() {
 
 	// Run our program.
 	p.Run()
+}
+
+func renderIndexPage(hostOS string) error {
+	tmplData := struct {
+		OperatingSystem string
+	}{
+		OperatingSystem: hostOS,
+	}
+
+	tmpl, err := template.ParseFiles(filepath.Join(defaultStaticDir, "index-template.html"))
+	if err != nil {
+		// should be caught in development time and not fail at runtime
+		return fmt.Errorf("static template parsing failed, %v", err)
+	}
+
+	indexFile, err := os.Create(filepath.Join(defaultStaticDir, "index.html"))
+	if err != nil {
+		return fmt.Errorf("could not create index.html, %v", err)
+	}
+
+	if err = tmpl.Execute(indexFile, tmplData); err != nil {
+		return fmt.Errorf("executing template: %v", err)
+	}
+	return nil
 }
 
 // certPool returns an X.509 certificate pool from `caFile`, the certificate file.

@@ -90,6 +90,27 @@ func constructContainerInfo(r *http.Request) (*containerInfo, error) {
 			c.userns = true
 		}
 	}
+
+	if len(r.URL.Query()["selinux"]) > 0 {
+		val := r.URL.Query()["selinux"][0]
+		// By default all the containers start with selinux enabled. Now user
+		// can override this default behavior.
+		c.selinux = true
+		if val == "disabled" {
+			c.selinux = false
+		}
+	}
+
+	if len(r.URL.Query()["apparmor"]) > 0 {
+		val := r.URL.Query()["apparmor"][0]
+		// By default all the containers start with apparmor enabled. Now user
+		// can override this default behavior.
+		c.apparmor = true
+		if val == "disabled" {
+			c.apparmor = false
+		}
+	}
+
 	return &c, nil
 }
 
