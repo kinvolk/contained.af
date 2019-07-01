@@ -18,7 +18,7 @@ dind: stop-dind ## Starts a docker-in-docker container for running the tests wit
 		--tmpfs /var/lib/docker \
 		--name $(NAME)-dind \
 		--privileged \
-		-p 10000:10000 \
+		-p 10000:10000 -p 36100-36110:36100-36110 \
 		-v $(CURDIR)/.certs:/etc/docker/ssl \
 		$(REGISTRY)/docker:userns \
 		dockerd -D --storage-driver $(DOCKER_GRAPHDRIVER) \
@@ -51,7 +51,8 @@ run: dind setuphostdir image ## Run the server locally in a docker container.
 		$(REGISTRY)/$(NAME) -d \
 		--dcacert=/etc/docker/ssl/cacert.pem \
 		--dcert=/etc/docker/ssl/client.cert \
-		--dkey=/etc/docker/ssl/client.key
+		--dkey=/etc/docker/ssl/client.key \
+		--tlsws $(ARGS)
 
 DOCKER_FLAGS+=--rm -i \
 	--disable-content-trust=true

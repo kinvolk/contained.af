@@ -259,8 +259,12 @@ func (h *handler) startContainer(ctrInfo *containerInfo) (*websocket.Conn, error
 		"stderr": []string{"1"},
 		"stream": []string{"1"},
 	}
-	wsURL := fmt.Sprintf("ws://%s/%s/containers/%s/attach/ws?%s",
-		h.url(ctrInfo.userns).Host, dockerAPIVersion, r.ID, v.Encode())
+	proto := "ws"
+	if h.tls_ws {
+		proto = "wss"
+	}
+	wsURL := fmt.Sprintf("%s://%s/%s/containers/%s/attach/ws?%s",
+		proto, h.url(ctrInfo.userns).Host, dockerAPIVersion, r.ID, v.Encode())
 	var dialer = &websocket.Dialer{
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: h.tlsConfig,

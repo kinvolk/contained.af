@@ -36,7 +36,8 @@ var (
 	staticDir string
 	port      string
 
-	debug bool
+	debug  bool
+	tls_ws bool
 )
 
 func main() {
@@ -63,6 +64,7 @@ func main() {
 	p.FlagSet.StringVar(&port, "port", "10000", "port for server")
 
 	p.FlagSet.BoolVar(&debug, "d", false, "enable debug logging")
+	p.FlagSet.BoolVar(&tls_ws, "tlsws", false, "enable TLS for container websocket")
 
 	// Set the before function.
 	p.Before = func(ctx context.Context) error {
@@ -110,9 +112,14 @@ func main() {
 		}
 
 		c := &http.Client{
-			Transport: &http.Transport{
-				// TLSClientConfig: &tlsConfig,
-			},
+			Transport: &http.Transport{},
+		}
+		if tls_ws {
+			c = &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tlsConfig,
+				},
+			}
 		}
 
 		if dockerCert != "" && dockerKey != "" {
@@ -141,6 +148,7 @@ func main() {
 
 			dUserNSCli:      dockerUserNSCLI,
 			dockerUserNSURL: dockerUserNSURL,
+			tls_ws:          tls_ws,
 		}
 
 		// ping handler
