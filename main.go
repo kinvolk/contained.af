@@ -37,6 +37,7 @@ var (
 )
 
 func main() {
+	var hostOS string
 	// Create a new cli program.
 	p := cli.NewProgram()
 	p.Name = "contained.af"
@@ -53,6 +54,7 @@ func main() {
 	p.FlagSet.StringVar(&dockerCACert, "dcacert", "", "trust certs signed only by this CA for docker host")
 	p.FlagSet.StringVar(&dockerCert, "dcert", "", "path to TLS certificate file for docker host")
 	p.FlagSet.StringVar(&dockerKey, "dkey", "", "path to TLS key file for docker host")
+	p.FlagSet.StringVar(&hostOS, "os", "", "operating system of the docker host")
 
 	p.FlagSet.StringVar(&staticDir, "frontend", defaultStaticDir, "directory that holds the static frontend files")
 	p.FlagSet.StringVar(&port, "port", "10000", "port for server")
