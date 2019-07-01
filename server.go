@@ -124,6 +124,13 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 	ctrInfo, err := constructContainerInfo(r)
 	if err != nil {
 		logrus.Errorf("generating container info failed: %v", err)
+		data := message{
+			Type: "stdout",
+			Data: fmt.Sprintf("generating container info failed: %v", err),
+		}
+		if err := conn.WriteJSON(data); err != nil {
+			logrus.Errorf("writing error message to browser websocket failed: %v", err)
+		}
 		return
 	}
 
@@ -131,6 +138,13 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 	containerWSConn, err := h.startContainer(ctrInfo)
 	if err != nil {
 		logrus.Errorf("starting container failed: %v", err)
+		data := message{
+			Type: "stdout",
+			Data: fmt.Sprintf("starting container failed: %v", err),
+		}
+		if err := conn.WriteJSON(data); err != nil {
+			logrus.Errorf("writing error message to browser websocket failed: %v", err)
+		}
 		return
 	}
 	defer containerWSConn.Close()
@@ -154,7 +168,7 @@ func (h *handler) profilesHandler(w http.ResponseWriter, r *http.Request) {
 					}
 					// cleanly close the browser connection
 					if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")); err != nil {
-						logrus.Errorf("closing broswer websocket failed: %v", err)
+						logrus.Errorf("closing browser websocket failed: %v", err)
 					}
 					break
 				}
