@@ -41,6 +41,7 @@ type containerInfo struct {
 	userns        bool
 	containerid   string
 	selinux       bool
+	apparmor      bool
 	dockerProfile dockerProfile
 }
 
@@ -115,7 +116,7 @@ func withExposedPort(port nat.Port) hostOptions {
 	}
 }
 
-func withSecurityOptions(profile dockerProfile, selinux bool) hostOptions {
+func withSecurityOptions(profile dockerProfile, selinux bool, apparmor bool) hostOptions {
 	return func(cfg *container.HostConfig) error {
 		seccompConfig, ok := seccompConfigs[profile]
 		if !ok {
@@ -135,6 +136,11 @@ func withSecurityOptions(profile dockerProfile, selinux bool) hostOptions {
 		// do it
 		if !selinux {
 			cfg.SecurityOpt = append(cfg.SecurityOpt, "label=disable")
+		}
+		// Apparmor is enabled by default if user asks to disable it only then we
+		// do it
+		if !apparmor {
+			cfg.SecurityOpt = append(cfg.SecurityOpt, "apparmor=unconfined")
 		}
 		return nil
 	}
@@ -220,7 +226,7 @@ func (h *handler) startContainer(ctrInfo *containerInfo) (*websocket.Conn, error
 
 	ctrHostCfg, err := NewContainerHostConfig(
 		withExposedPort(port),
-		withSecurityOptions(ctrInfo.dockerProfile, ctrInfo.selinux),
+		withSecurityOptions(ctrInfo.dockerProfile, ctrInfo.selinux, ctrInfo.apparmor),
 		withHostVolumes(ctrInfo.dockerProfile),
 		withCapabilities(ctrInfo.dockerProfile),
 	)
