@@ -34,6 +34,7 @@ type handler struct {
 	dockerUserNSURL *url.URL
 
 	tlsConfig *tls.Config
+	tls_ws     bool
 }
 
 func (h *handler) client(userns bool) *client.Client {
